@@ -1,0 +1,90 @@
+
+name: Score Kubernetes Challenge
+
+on:
+  push:
+    branches:
+      - solution
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout solution
+        uses: actions/checkout@v4
+
+      - name: Validate and score
+        id: score
+        shell: bash
+        run: |
+          python -m pip install PyYAML
+
+          python <<'PY'
+          import yaml
+          from pathlib import Path
+
+          score = 0
+          checks = []
+
+          def check(name, passed, points):
+              global score
+              if passed:
+                  score += points
+              checks.append(
+                  f"{'PASS' if passed else 'FAIL'}: "
+                  f"{name} ({points if passed else 0}/{points})"
+              )
+
+          try:
+              deployment = yaml.safe_load(
+                  Path("manifests/deployment.yaml").read_text()
+              )
+              image = deployment["spec"]["template"]["spec"][
+                  "containers"
+              ][0]["image"]
+
+              check(
+                  "Image tag corrected",
+                  image != "nginx:fdx-broken-tag"
+                  and ":" in image,
+                  50
+              )
+
+              service = yaml.safe_load(
+                  Path("manifests/service.yaml").read_text()
+              )
+              port = service["spec"]["ports"][0]["targetPort"]
+
+              check(
+                  "Service target port corrected",
+                  str(port) == "80",
+                  50
+              )
+
+          except Exception as exc:
+              checks.append(f"FAIL: Invalid or missing YAML: {exc}")
+
+          print("\n".join(checks))
+          print(f"\nFINAL SCORE: {score}/100")
+
+          with open("score.txt", "w") as result:
+              result.write(f"{score}/100\n")
+              result.write("\n".join(checks))
+          PY
+
+      - name: Publish score summary
+        if: always()
+        run: |
+          if [ -f score.txt ]; then
+            cat score.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Scoring did not produce a result." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
