@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:1.25.5
+          image: nginx:fdx-broken-tag
           ports:
             - name: http
               containerPort: 80
